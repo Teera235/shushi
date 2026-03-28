@@ -12,8 +12,8 @@ DB_CONFIG = {
     'host': 'localhost',
     'port': '5432',
     'user': 'postgres',
-    'password': 'nabha_solar_2024',
-    'database': 'nabha_solar'
+    'password': 'toothless_solar_2024',
+    'database': 'toothless_solar'
 }
 
 # Bangkok area bounds

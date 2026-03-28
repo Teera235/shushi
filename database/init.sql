@@ -1,4 +1,4 @@
--- Initialize Nabha Solar Database
+-- Initialize Toothless Solar Database
 -- Create PostGIS extension
 CREATE EXTENSION IF NOT EXISTS postgis;
 

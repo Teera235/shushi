@@ -1,6 +1,6 @@
 @echo off
 echo ========================================
-echo   Nabha Solar Buildings Map
+echo   Toothless Solar Buildings Map
 echo   Starting All Services...
 echo ========================================
 echo.

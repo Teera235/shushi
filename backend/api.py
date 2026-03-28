@@ -14,15 +14,13 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-app = FastAPI(title="Nabha Solar Buildings API")
+app = FastAPI(title="Toothless Solar Buildings API")
 
 # CORS - Allow all origins including AWS CloudFront
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "*",  # Allow all origins for production
-        "https://d21iw00krs7100.cloudfront.net",  # AWS CloudFront
-        "https://nabha-solar-dashboard-frontend.s3-website-us-east-1.amazonaws.com",  # S3 direct
         "http://localhost:3000",  # Local development
     ],
     allow_credentials=True,
@@ -43,8 +41,8 @@ else:
         'host': os.getenv('DB_HOST', 'localhost'),
         'port': os.getenv('DB_PORT', '5432'),
         'user': os.getenv('DB_USER', 'postgres'),
-        'password': os.getenv('DB_PASSWORD', 'nabha_solar_2024'),
-        'database': os.getenv('DB_NAME', 'nabha_solar')
+        'password': os.getenv('DB_PASSWORD', 'toothless_solar_2024'),
+        'database': os.getenv('DB_NAME', 'toothless_solar')
     }
 
 def get_db_connection():
@@ -82,7 +80,7 @@ class BoundingBox(BaseModel):
 def root():
     """API info"""
     return {
-        "name": "Nabha Solar Buildings API",
+        "name": "Toothless Solar Buildings API",
         "version": "1.0.0",
         "buildings": "1.88M in Bangkok",
         "endpoints": {

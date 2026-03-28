@@ -1,4 +1,4 @@
-# Deploy Nabha Solar Dashboard to GCP
+# Deploy Toothless Solar Dashboard to GCP
 # PowerShell script for Windows
 
 param(
@@ -14,7 +14,7 @@ param(
     [string]$Region = "asia-southeast1"
 )
 
-Write-Host "🚀 Deploying Nabha Solar Dashboard to GCP" -ForegroundColor Green
+Write-Host "🚀 Deploying Toothless Solar Dashboard to GCP" -ForegroundColor Green
 Write-Host "📍 Project: $ProjectId" -ForegroundColor Cyan
 Write-Host "📍 Region: $Region" -ForegroundColor Cyan
 Write-Host ""
@@ -51,7 +51,7 @@ gcloud run deploy buildings-api `
     --timeout 300 `
     --max-instances 10 `
     --set-env-vars "DB_HOST=/cloudsql/$CloudSqlConnection" `
-    --set-env-vars "DB_NAME=nabha_solar" `
+    --set-env-vars "DB_NAME=toothless_solar" `
     --set-env-vars "DB_USER=postgres" `
     --set-env-vars "DB_PASSWORD=$DbPassword" `
     --set-env-vars "DB_PORT=5432" `

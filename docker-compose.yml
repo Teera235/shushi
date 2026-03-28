@@ -4,11 +4,11 @@ services:
   # PostgreSQL with PostGIS
   postgres:
     image: postgis/postgis:15-3.3
-    container_name: nabha-solar-db
+    container_name: toothless-solar-db
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: nabha_solar_2024
-      POSTGRES_DB: nabha_solar
+      POSTGRES_PASSWORD: toothless_solar_2024
+      POSTGRES_DB: toothless_solar
     ports:
       - "5432:5432"
     volumes:
@@ -23,9 +23,9 @@ services:
   # pgAdmin (Optional - for database management)
   pgadmin:
     image: dpage/pgadmin4:latest
-    container_name: nabha-solar-pgadmin
+    container_name: toothless-solar-pgadmin
     environment:
-      PGADMIN_DEFAULT_EMAIL: admin@nabha.com
+      PGADMIN_DEFAULT_EMAIL: admin@toothless.com
       PGADMIN_DEFAULT_PASSWORD: admin
     ports:
       - "5050:80"
