@@ -1,12 +1,13 @@
 # Toothless Solar Buildings Map
 
-A geospatial web application for analyzing rooftop solar photovoltaic potential on building footprints using Google Open Buildings dataset and physics-based solar modeling.
+A geospatial web application for analyzing rooftop solar photovoltaic potential on building footprints using custom segmentation models and physics-based solar modeling.
 
 ## Overview
 
 This application provides accurate solar energy potential assessments for buildings in Thailand by combining:
 
-- **Google Open Buildings Dataset**: 1.88M building footprints with confidence scores
+- **Custom Building Segmentation**: Deep learning-based building footprint detection with confidence scores
+- **Google Open Buildings Dataset**: Supplementary reference data for validation and coverage
 - **pvlib-python**: Industry-standard photovoltaic system modeling library
 - **NASA POWER API**: Satellite-derived solar irradiance data
 - **Interactive Mapping**: Real-time visualization on satellite imagery
@@ -195,10 +196,22 @@ co2_reduction_tonnes_per_year = co2_reduction_kg_per_year / 1000
 ### Data Sources
 
 **Building Footprints**
-- **Dataset**: Google Open Buildings
-- **Coverage**: Thailand nationwide
-- **Records**: 1.88M buildings in Bangkok Metropolitan Region
+- **Primary Source**: Custom segmentation model trained for building detection
+- **Model Architecture**: Deep learning-based semantic segmentation
+- **Supplementary Data**: Google Open Buildings dataset for validation and coverage extension
+- **Coverage**: Thailand nationwide with focus on Bangkok Metropolitan Region
+- **Records**: 1.88M+ buildings
 - **Attributes**: Geometry (polygon), area, confidence score, centroid coordinates
+- **Output Format**: GeoJSON/PostGIS-compatible geometries
+
+**Segmentation Model Details**
+- **Input**: High-resolution satellite imagery
+- **Output**: Building footprint polygons with confidence scores
+- **Confidence Score**: Model prediction certainty (0.0-1.0)
+- **Post-processing**: Polygon simplification, area filtering, geometry validation
+
+**Google Open Buildings (Reference)**
+- **Usage**: Validation, gap filling, and coverage extension
 - **License**: Open Data Commons Open Database License (ODbL)
 - **Access**: https://sites.research.google/open-buildings/
 
@@ -330,7 +343,34 @@ cd database
 python import_sample_data.py
 ```
 
-#### Full Dataset (1.88M buildings)
+#### Custom Segmentation Model Output
+If you have building footprints from the custom segmentation model:
+```bash
+python import_custom_data.py --file path/to/segmentation_output.geojson
+```
+
+Expected format:
+```json
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[[lng, lat], ...]]
+      },
+      "properties": {
+        "area_m2": 250.5,
+        "confidence": 0.95
+      }
+    }
+  ]
+}
+```
+
+#### Google Open Buildings Dataset (Supplementary)
+For additional coverage or validation:
 1. Download from Google Open Buildings:
    - Visit: https://sites.research.google/open-buildings/
    - Select: Thailand → Bangkok Metropolitan Region
@@ -339,7 +379,7 @@ python import_sample_data.py
 
 2. Import using provided script:
 ```bash
-python import_full_data.py --file path/to/downloaded/file.parquet
+python import_google_buildings.py --file path/to/downloaded/file.parquet
 ```
 
 ## Running the Application
@@ -550,10 +590,12 @@ docker-compose up -d
 ## Limitations and Assumptions
 
 ### Data Limitations
-- Building footprints represent 2D roof area; actual 3D geometry not available
-- Confidence scores reflect detection certainty, not roof condition or structural suitability
+- Building footprints from segmentation model represent 2D roof area; actual 3D geometry not available
+- Confidence scores reflect model prediction certainty, not roof condition or structural suitability
+- Segmentation accuracy depends on satellite imagery resolution and quality
 - No information on roof material, age, or load-bearing capacity
 - Shading from trees, adjacent buildings, or terrain not modeled
+- Model may have varying accuracy across different building types and urban densities
 
 ### Calculation Assumptions
 - Assumes flat or optimally-tilted roof surface
@@ -599,7 +641,8 @@ docker-compose up -d
 This project is licensed under the MIT License. See LICENSE file for details.
 
 ### Third-Party Licenses
-- **Google Open Buildings**: Open Data Commons Open Database License (ODbL)
+- **Custom Segmentation Model**: Proprietary (contact repository owner for licensing)
+- **Google Open Buildings**: Open Data Commons Open Database License (ODbL) - used as supplementary reference data
 - **pvlib-python**: BSD 3-Clause License
 - **NASA POWER Data**: Public domain (U.S. Government work)
 - **Leaflet**: BSD 2-Clause License
@@ -656,7 +699,8 @@ For technical issues, feature requests, or questions:
 ## Acknowledgments
 
 This project utilizes data and tools from:
-- Google Research Open Buildings team
+- Custom building segmentation model development team
+- Google Research Open Buildings team (supplementary reference data)
 - NASA Langley Research Center POWER Project
 - pvlib-python development community
 - Sandia National Laboratories (pvlib original development)
