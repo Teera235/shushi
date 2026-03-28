@@ -135,9 +135,12 @@ const BuildingsMap = () => {
   }, []);
 
   // Handle building selection
-  const handleBuildingClick = useCallback((building) => {
+  const handleBuildingClick = useCallback(async (building) => {
     setSelectedBuilding(building);
-    const potential = calculateBuildingSolarPotential(building);
+    setSolarPotential(null); // Clear previous data
+    
+    // Calculate solar potential (will try pvlib backend first, then fallback)
+    const potential = await calculateBuildingSolarPotential(building);
     setSolarPotential(potential);
   }, []);
 
@@ -308,9 +311,20 @@ const BuildingsMap = () => {
             <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '12px', marginTop: '12px' }}>
               <p style={{ color: '#6b7280' }}>CO₂ Reduction</p>
               <p style={{ fontWeight: '600', color: '#10b981' }}>
-                {solarPotential.co2Reduction.toLocaleString()} kg/year
+                {solarPotential.co2ReductionKg.toLocaleString()} kg/year
               </p>
             </div>
+
+            {solarPotential.irradianceSource && (
+              <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: '12px', marginTop: '12px', fontSize: '12px', color: '#6b7280' }}>
+                <p>
+                  <strong>Solar Irradiance:</strong> {solarPotential.irradianceValue?.toFixed(2)} kWh/m²/day
+                </p>
+                <p style={{ marginTop: '4px' }}>
+                  <strong>Data Source:</strong> {solarPotential.irradianceSource}
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}

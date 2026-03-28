@@ -6,11 +6,13 @@ Provides access to 1.88M building footprints in Bangkok
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict
 import psycopg2
 from psycopg2.extras import RealDictCursor
 import os
 from dotenv import load_dotenv
+import requests
+from datetime import datetime
 
 load_dotenv()
 
@@ -302,3 +304,200 @@ def search_by_address(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8001)
+
+
+# Solar Calculation Models
+class SolarCalculationRequest(BaseModel):
+    latitude: float
+    longitude: float
+    area_m2: float
+    confidence: float = 0.9
+    tilt: Optional[float] = None  # If None, use latitude (optimal for Thailand)
+    azimuth: Optional[float] = 180  # 180 = facing south (optimal for Northern hemisphere)
+
+class SolarCalculationResponse(BaseModel):
+    usable_roof_area: float
+    system_size_kwp: float
+    annual_production_kwh: float
+    installation_cost_thb: float
+    annual_savings_thb: float
+    payback_period_years: Optional[float]
+    co2_reduction_kg: float
+    co2_reduction_ton: float
+    irradiance_source: str
+    irradiance_kwh_m2_day: float
+    assumptions: Dict
+
+@app.post("/solar/calculate", response_model=SolarCalculationResponse)
+async def calculate_solar_potential(request: SolarCalculationRequest):
+    """
+    Calculate solar potential using pvlib-python for accurate modeling
+    
+    This endpoint uses pvlib to:
+    - Get NASA POWER irradiance data
+    - Calculate optimal tilt angle
+    - Model PV system performance with temperature effects
+    - Account for inverter losses and system efficiency
+    """
+    try:
+        # Try to import pvlib
+        try:
+            import pvlib
+            from pvlib import location, pvsystem, modelchain
+            import pandas as pd
+            import numpy as np
+            use_pvlib = True
+        except ImportError:
+            print("⚠️ pvlib not installed, using simplified calculation")
+            use_pvlib = False
+        
+        # Constants (Thailand-specific)
+        PANEL_EFFICIENCY = 0.20
+        USABLE_ROOF_RATIO = 0.50
+        COST_PER_WP = 25  # THB/Wp
+        ELECTRICITY_RATE = 4.18  # THB/kWh
+        CO2_FACTOR = 0.40  # kgCO₂/kWh
+        
+        # Adjust for confidence
+        confidence_adjustment = max(request.confidence, 0.7)
+        usable_roof_area = request.area_m2 * USABLE_ROOF_RATIO * confidence_adjustment
+        system_size_kwp = usable_roof_area * PANEL_EFFICIENCY
+        
+        if use_pvlib:
+            # Use pvlib for accurate calculation
+            try:
+                # Create location
+                site = location.Location(
+                    latitude=request.latitude,
+                    longitude=request.longitude,
+                    tz='Asia/Bangkok',
+                    altitude=10  # Bangkok average
+                )
+                
+                # Get solar position for typical year
+                times = pd.date_range('2024-01-01', '2024-12-31', freq='H', tz=site.tz)
+                solar_position = site.get_solarposition(times)
+                
+                # Get clear sky irradiance (pvlib built-in model)
+                clearsky = site.get_clearsky(times)
+                
+                # Optimal tilt = latitude for Thailand
+                tilt = request.tilt if request.tilt is not None else abs(request.latitude)
+                azimuth = request.azimuth if request.azimuth is not None else 180
+                
+                # Calculate POA (Plane of Array) irradiance
+                poa_irradiance = pvlib.irradiance.get_total_irradiance(
+                    surface_tilt=tilt,
+                    surface_azimuth=azimuth,
+                    dni=clearsky['dni'],
+                    ghi=clearsky['ghi'],
+                    dhi=clearsky['dhi'],
+                    solar_zenith=solar_position['apparent_zenith'],
+                    solar_azimuth=solar_position['azimuth']
+                )
+                
+                # Temperature model (Thailand is hot!)
+                temp_model_params = pvlib.temperature.TEMPERATURE_MODEL_PARAMETERS['sapm']['open_rack_glass_glass']
+                cell_temperature = pvlib.temperature.sapm_cell(
+                    poa_irradiance['poa_global'],
+                    temp_air=30,  # Average Thailand temp
+                    wind_speed=2,  # Light breeze
+                    **temp_model_params
+                )
+                
+                # Module parameters (typical monocrystalline)
+                module_params = {
+                    'pdc0': system_size_kwp * 1000,  # Wp
+                    'gamma_pdc': -0.004,  # Temperature coefficient (%/°C)
+                }
+                
+                # Calculate DC power with temperature effects
+                dc_power = pvlib.pvsystem.pvwatts_dc(
+                    poa_irradiance['poa_global'],
+                    cell_temperature,
+                    module_params['pdc0'],
+                    module_params['gamma_pdc']
+                )
+                
+                # Inverter efficiency (typical)
+                ac_power = dc_power * 0.96  # 96% inverter efficiency
+                
+                # Annual production (kWh)
+                annual_production = (ac_power.sum() / 1000)  # W to kWh
+                
+                # Average daily irradiance for display
+                avg_irradiance = (poa_irradiance['poa_global'].mean() / 1000) * 24  # W/m² to kWh/m²/day
+                
+                irradiance_source = "pvlib (Clear Sky Model)"
+                
+            except Exception as e:
+                print(f"⚠️ pvlib calculation failed: {e}, falling back to simple model")
+                use_pvlib = False
+        
+        if not use_pvlib:
+            # Fallback: Simple calculation
+            # Try NASA POWER API
+            try:
+                nasa_url = f"https://power.larc.nasa.gov/api/temporal/monthly/point"
+                params = {
+                    'parameters': 'ALLSKY_SFC_SW_DWN',
+                    'community': 'RE',
+                    'longitude': round(request.longitude, 2),
+                    'latitude': round(request.latitude, 2),
+                    'format': 'JSON'
+                }
+                response = requests.get(nasa_url, params=params, timeout=5)
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    monthly_data = data.get('properties', {}).get('parameter', {}).get('ALLSKY_SFC_SW_DWN', {})
+                    monthly_values = [v for v in monthly_data.values() if isinstance(v, (int, float))]
+                    
+                    if monthly_values:
+                        avg_irradiance = sum(monthly_values) / len(monthly_values)
+                        irradiance_source = "NASA POWER"
+                    else:
+                        avg_irradiance = 5.06
+                        irradiance_source = "Default (Thailand avg)"
+                else:
+                    avg_irradiance = 5.06
+                    irradiance_source = "Default (Thailand avg)"
+            except:
+                avg_irradiance = 5.06
+                irradiance_source = "Default (Thailand avg)"
+            
+            # Simple calculation
+            SYSTEM_EFFICIENCY = 0.80
+            annual_production = system_size_kwp * avg_irradiance * 365 * SYSTEM_EFFICIENCY
+        
+        # Financial calculations
+        installation_cost = system_size_kwp * 1000 * COST_PER_WP
+        annual_savings = annual_production * ELECTRICITY_RATE
+        payback_period = installation_cost / annual_savings if annual_savings > 0 else None
+        
+        # Environmental
+        co2_reduction = annual_production * CO2_FACTOR
+        
+        return {
+            "usable_roof_area": round(usable_roof_area),
+            "system_size_kwp": round(system_size_kwp, 1),
+            "annual_production_kwh": round(annual_production),
+            "installation_cost_thb": round(installation_cost),
+            "annual_savings_thb": round(annual_savings),
+            "payback_period_years": round(payback_period, 1) if payback_period else None,
+            "co2_reduction_kg": round(co2_reduction),
+            "co2_reduction_ton": round(co2_reduction / 1000, 1),
+            "irradiance_source": irradiance_source,
+            "irradiance_kwh_m2_day": round(avg_irradiance, 2),
+            "assumptions": {
+                "panel_efficiency": PANEL_EFFICIENCY,
+                "usable_roof_ratio": USABLE_ROOF_RATIO,
+                "cost_per_wp": COST_PER_WP,
+                "electricity_rate": ELECTRICITY_RATE,
+                "co2_factor": CO2_FACTOR,
+                "calculation_method": "pvlib" if use_pvlib else "simplified"
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Solar calculation error: {str(e)}")
